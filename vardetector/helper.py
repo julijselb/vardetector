@@ -14,8 +14,7 @@ class Variant():
             self.variant_type = variant_type
 
         
-        
-    
+            
 class Read():
     
     def __init__(self, name: str, reference: str, start: int, end: int, cigar: str, sequence: str, zero_based: bool = True):
@@ -126,11 +125,7 @@ class Read():
             ## ToDo implement for H and P???
 
         
-
-                
-
-        
-    
+                    
 class Interval():
     def __init__(self, chromosome: str, start: int, end: int, sequence: str, seq_type: str):
         self.chromosome = chromosome
@@ -153,12 +148,12 @@ class CigarChar(Enum):
     
     
     
-class VariantTypeChar(Enum):
-    snv = "SNV"
-    sequence_alteration = "sequence_alteration"
-    deletion = "deletion"
-    substitution = "substitution"
-    insertion = "insertion"
+# class VariantTypeChar(Enum):
+#     snv = "SNV"
+#     sequence_alteration = "sequence_alteration"
+#     deletion = "deletion"
+#     substitution = "substitution"
+#     insertion = "insertion"
 
     
     
@@ -169,7 +164,11 @@ class VariantIntervals():
         self.reads = reads
         self.intervals = self.intervals_from_reads()
         self.supporting_reads = 0
+        self.all_reads = 0
         self.count_supporting_reads()
+        self.proportion_supporting = None
+        if self.all_reads != 0:
+            self.proportion_supporting = self.supporting_reads / self.all_reads
        
     
     def intervals_from_reads(self) -> list:
@@ -191,12 +190,17 @@ class VariantIntervals():
         pass
     
     def count_supporitng_reads_variant_type(self) -> None:
-        if self.variant.variant_type == VariantTypeChar("SNV").value:
+        ## SNVs
+        if len(self.variant.reference) == 1 and len(self.variant.alternative) == 1:
             for interval in self.intervals:
                 relative_var_position: int = (self.variant.position - interval.start) #minus 1 is due to 0 based sequence
                 if self.variant.alternative == interval.sequence[relative_var_position]:
                     self.supporting_reads += 1
-         
+                    self.all_reads += 1
+                else:
+                    self.all_reads += 1
+        ## insertions
+        if len(self.variant.reference) == 1 and len(self.variant.alternative) > 1:
         pass
     
     def count_supporitng_reads_no_variant_type(self) -> None:

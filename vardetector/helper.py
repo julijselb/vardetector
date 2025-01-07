@@ -1,0 +1,206 @@
+from enum import Enum
+
+
+class Variant():
+    def __init__(self, chromosome: str, position: int, reference: str, alternative: str, variant_type: str = None):
+        self.chromosome = chromosome
+        self.position = position
+        self.reference = reference
+        self.alternative = alternative
+        alternative_str = "-".join(alternative.split(","))
+        self.identifier = f"{chromosome}-{position}-{reference}-{alternative_str}"
+        
+        if variant_type is not None:
+            self.variant_type = variant_type
+
+        
+        
+    
+class Read():
+    
+    def __init__(self, name: str, reference: str, start: int, end: int, cigar: str, sequence: str, zero_based: bool = True):
+        self.name = name
+        self.reference = reference
+        self.start = start
+        self.end = end
+        self.cigar = cigar
+        self.sequence = sequence
+        self.zero_based = zero_based
+        self.parsed_cigar = self.parse_cigar()
+        self.interval_list = self.create_interval_list()
+        
+    
+    def parse_cigar(self) -> list:
+        result_list: list = []
+
+        digit_strings: list = ["0","1","2","3","4","5","6","7","8","9"]
+
+        digit_list: list = []
+        char_list: list = []
+        temp_list: list = []
+        cigar_int: str = None
+
+        ## if non int strings are present at the begining of the cigar 
+        for idx, character in enumerate(self.cigar):
+            if character in digit_strings:
+                break
+
+            result_list.append([1,character])
+            cigar_int: str = self.cigar[idx+1:]
+
+        if cigar_int is None:
+            cigar_int = self.cigar
+
+        ##return the list if first values are non numeric values
+        if cigar_int == "":
+            return result_list
+
+        ## parse digit character pairs (i.e. 141M15D11N)
+        for character in cigar_int:
+            if character in digit_strings:
+                if char_list:
+                    temp_list.append("".join(char_list))
+                    result_list.append(temp_list)
+                    temp_list = []
+                    char_list = []
+
+                digit_list.append(character)
+
+            else:
+                if digit_list:
+                    temp_list.append(int("".join(digit_list)))
+                    digit_list = []
+
+                char_list.append(character)
+
+        temp_list.append("".join(char_list))
+        result_list.append(temp_list)
+
+        final_list: list = []
+        for entity in result_list:
+            if len(entity[1]) == 1:
+                final_list.append(entity)
+            else:
+                for idx, character in enumerate(entity[1]):
+                    if idx == 0:
+                        final_list.append([entity[0],character])
+                    else:
+                        final_list.append([1,character])
+
+        return final_list
+    
+    
+    def create_interval_list(self):
+        i_list: list = []
+        chromosome = self.reference
+        start = self.start
+        seq_start = 0
+        sequence = self.sequence
+        
+        for cigar_tuple in self.parsed_cigar:
+            seq_type = cigar_tuple[1]
+            seq_len = cigar_tuple[0]
+            
+            if seq_type == CigarChar("N").value:
+                start += seq_len
+            
+            if seq_type == CigarChar("M").value or seq_type == CigarChar("=").value or seq_type == CigarChar("X").value:
+                temp_sequence = sequence[seq_start: (seq_start+seq_len)]
+                
+                i_list.append(Interval(chromosome=chromosome, start=start, end=(start+seq_len), sequence=temp_sequence, seq_type=seq_type))
+                start += seq_len
+                seq_start += seq_len
+            
+            if seq_type == CigarChar("I").value or seq_type == CigarChar("S").value: ##S was added here check if it is OK or if it should be in before if statement
+                temp_sequence = sequence[seq_start: (seq_start+seq_len)]
+                i_list.append(Interval(chromosome=chromosome, start=start, end=start, sequence=temp_sequence, seq_type=seq_type))
+                
+                seq_start += seq_len
+                
+            if seq_type == CigarChar("D").value:
+                i_list.append(Interval(chromosome=chromosome, start=start, end=(start+seq_len), sequence=None, seq_type=seq_type))
+                start += seq_len
+        
+        return i_list
+                
+            ## ToDo implement for H and P???
+
+        
+
+                
+
+        
+    
+class Interval():
+    def __init__(self, chromosome: str, start: int, end: int, sequence: str, seq_type: str):
+        self.chromosome = chromosome
+        self.start = start
+        self.end = end
+        self.sequence = sequence
+        
+    
+    
+class CigarChar(Enum):
+    M = "M"
+    I = "I"
+    D = "D"
+    N = "N"
+    S = "S"
+    H = "H"
+    P = "P"
+    E = "="
+    X = "X"
+    
+    
+    
+class VariantTypeChar(Enum):
+    snv = "SNV"
+    sequence_alteration = "sequence_alteration"
+    deletion = "deletion"
+    substitution = "substitution"
+    insertion = "insertion"
+
+    
+    
+class VariantIntervals():
+    
+    def __init__(self, variant: Variant, reads: list):
+        self.variant = variant
+        self.reads = reads
+        self.intervals = self.intervals_from_reads()
+        self.supporting_reads = 0
+        self.count_supporting_reads()
+       
+    
+    def intervals_from_reads(self) -> list:
+        intervals = []
+        for read in self.reads:
+            for interval in read.interval_list:
+                if interval.start <= self.variant.position and self.variant.position <= interval.end:
+                    intervals.append(interval)
+        
+        return intervals
+    
+    def count_supporting_reads(self) -> None:
+        if self.variant.variant_type is not None:
+            self.count_supporitng_reads_variant_type()
+        
+        if self.variant.variant_type is None:
+            ## Todo implement for 
+            pass
+        pass
+    
+    def count_supporitng_reads_variant_type(self) -> None:
+        if self.variant.variant_type == VariantTypeChar("SNV").value:
+            for interval in self.intervals:
+                relative_var_position: int = (self.variant.position - interval.start) #minus 1 is due to 0 based sequence
+                if self.variant.alternative == interval.sequence[relative_var_position]:
+                    self.supporting_reads += 1
+         
+        pass
+    
+    def count_supporitng_reads_no_variant_type(self) -> None:
+        pass
+        
+        
+    

@@ -162,7 +162,7 @@ class VariantIntervals():
     def __init__(self, variant: Variant, reads: list):
         self.variant = variant
         self.reads = reads
-        self.intervals = self.intervals_from_reads()
+        self.intervals = self.variant_associated_intervals()
         self.supporting_reads = 0
         self.all_reads = 0
         self.count_supporting_reads()
@@ -171,7 +171,7 @@ class VariantIntervals():
             self.proportion_supporting = self.supporting_reads / self.all_reads
        
     
-    def intervals_from_reads(self) -> list:
+    def variant_associated_intervals(self) -> list:
         intervals = []
         for read in self.reads:
             for interval in read.interval_list:
@@ -181,30 +181,60 @@ class VariantIntervals():
         return intervals
     
     def count_supporting_reads(self) -> None:
-        if self.variant.variant_type is not None:
-            self.count_supporitng_reads_variant_type()
-        
-        if self.variant.variant_type is None:
-            ## Todo implement for 
-            pass
-        pass
-    
-    def count_supporitng_reads_variant_type(self) -> None:
         ## SNVs
         if len(self.variant.reference) == 1 and len(self.variant.alternative) == 1:
             for interval in self.intervals:
-                relative_var_position: int = (self.variant.position - interval.start) #minus 1 is due to 0 based sequence
+                relative_var_position: int = (self.variant.position - interval.start)
                 if self.variant.alternative == interval.sequence[relative_var_position]:
                     self.supporting_reads += 1
                     self.all_reads += 1
                 else:
                     self.all_reads += 1
+        
+        ## ToDo fix insertions and deletions - i.e. position in the extreme end of the read
         ## insertions
         if len(self.variant.reference) == 1 and len(self.variant.alternative) > 1:
-        pass
-    
-    def count_supporitng_reads_no_variant_type(self) -> None:
-        pass
+            for interval in self.intervals:
+                relative_var_start: int = (self.variant.position - interval.start)
+                relative_var_end: int = relative_var_start + len(self.variant.alternative)
+                relative_var_second_end: int = relative_var_end + len(self.variant.alternative)
+                
+                insertion_seq: str = interval.sequence[relative_var_start: relative_var_end]
+                after_insertion_seq: str = None
+                if len(interval.sequence) >= relative_var_end:
+                    after_insertion_seq = interval.sequence[relative_var_end: (relative_var_second_end - 1)] 
+                    
+                if after_insertion_seq is not None: 
+                    if insertion_seq[1:] == after_insertion_seq[:-1]: #-1 to remove first and last base 
+                        self.all_reads += 1
+                        continue
+                    
+                if self.variant.alternative == insertion_seq:
+                    self.supporting_reads += 1
+                    self.all_reads += 1
+                else:
+                    self.all_reads += 1
+                    
         
-        
-    
+        ##deletions
+        if len(self.variant.reference) > 1 and len(self.variant.alternative) == 1:
+            for interval in self.intervals:
+                relative_var_start: int = (self.variant.position - interval.start)
+                relative_var_end: int = relative_var_start + len(self.variant.reference)
+                relative_var_second_end: int = relative_var_end + len(self.variant.reference)
+                    
+                del_seq: str = interval.sequence[relative_var_start: relative_var_end]
+                after_del_seq: str = None
+                if len(interval.sequence) >= relative_var_end:
+                    after_del_seq = interval.sequence[relative_var_end : relative_var_second_end]
+                    
+                if after_del_seq is not None:
+                    if del_seq[1:] == after_del_seq[:-1]:
+                        self.all_reads += 1
+                        continue
+                
+                if self.variant.reference == del_seq:
+                    self.all_reads += 1
+                else:
+                    self.supporting_reads += 1
+                    self.all_reads += 1

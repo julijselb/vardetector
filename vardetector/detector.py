@@ -1,5 +1,6 @@
 import biobear as bb
 import polars as pl
+# import pandas as pd
 
 from helper import Variant
 from helper import Read
@@ -7,7 +8,7 @@ from helper import VariantIntervals
 
 ROW_LIMIT: int = 1000000
 
-def detect_variants(path_to_bam_folder: str, path_to_vcf: str = None) -> list:
+def detect_variants(path_to_bam_folder: str, path_to_vcf: str) -> list:
     
     bam_df: pl.DataFrame = read_bam_files(path_to_bam_folder= path_to_bam_folder)
     bam_df = bam_df.drop_nulls("reference")
@@ -52,9 +53,30 @@ def detect_variants(path_to_bam_folder: str, path_to_vcf: str = None) -> list:
                 
     return variants_intervals
 
-    
 
+
+
+def create_report_df(path_to_bam_folder: str, path_to_vcf: str, to_polars=True):
     
+    variants_intervals: list = detect_variants(path_to_bam_folder=path_to_bam_folder, path_to_vcf=path_to_vcf)
+    variants_summary: list = []
+    for variant_intervals in variants_intervals:
+        temp_variant = {}
+        temp_variant["identifier"] = variant_intervals.variant.identifier
+        temp_variant["supporting_reads"] = variant_intervals.supporting_reads
+        temp_variant["all_reads"] = variant_intervals.all_reads
+        temp_variant["proportion_supporting"] = variant_intervals.proportion_supporting
+        variants_summary.append(temp_variant)
+        
+    if to_polars:
+        return_df = pl.DataFrame(variants_summary)
+        
+    ## ToDo add support for pandas
+        
+    return return_df
+
+
+        
 def read_bam_files(path_to_bam_folder: str):
     
     session = bb.new_session()
@@ -63,6 +85,7 @@ def read_bam_files(path_to_bam_folder: str):
     
     query_2 = "SELECT name, reference, start, end, cigar, sequence, mate_reference FROM bam_table"
     return session.sql(f"{query_2}").to_polars()
+
 
 
 

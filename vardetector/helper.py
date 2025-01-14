@@ -143,15 +143,6 @@ class CigarChar(Enum):
     P = "P"
     E = "="
     X = "X"
-    
-    
-    
-# class VariantTypeChar(Enum):
-#     snv = "SNV"
-#     sequence_alteration = "sequence_alteration"
-#     deletion = "deletion"
-#     substitution = "substitution"
-#     insertion = "insertion"
 
     
     
@@ -183,30 +174,31 @@ class VariantIntervals():
         ## SNVs
         if len(self.variant.reference) == 1 and len(self.variant.alternative) == 1:
             for interval in self.intervals:
-                if interval.seq_type in [CigarChar("I").value, CigarChar("D").value, CigarChar("S").value, CigarChar("H").value, CigarChar("P").value]:
-                    continue
-                    
                 if  self.variant.position < interval.start or  self.variant.position > interval.end:
                     continue
                 
+                self.all_reads += 1
+
+                if interval.seq_type in [CigarChar("I").value, CigarChar("D").value, CigarChar("S").value, CigarChar("H").value, CigarChar("P").value]:
+                    continue
+                    
                 relative_var_position: int = (self.variant.position - interval.start)
                 if self.variant.alternative == interval.sequence[relative_var_position]:
                     self.supporting_reads += 1
-                    self.all_reads += 1
-                else:
-                    self.all_reads += 1
+
         
-        ## ToDo fix insertions and deletions - i.e. position in the extreme end of the read
+        ## ToDo check insertions/deletions for accuracy
         ## insertions
         if len(self.variant.reference) == 1 and len(self.variant.alternative) > 1:
             for interval in self.intervals:
+                if  (self.variant.position + 1) < interval.start or  (self.variant.position + 1) > interval.end:
+                    continue
+                    
+                self.all_reads += 1
                 
                 if interval.seq_type != CigarChar("I").value:
                     continue
-                
-                if  (self.variant.position + 1) < interval.start or  (self.variant.position + 1) > interval.end:
-                    continue
-                
+
                 relative_var_start: int = (self.variant.position - interval.start)
                 relative_var_end: int = relative_var_start + len(self.variant.alternative)
                 
@@ -214,21 +206,20 @@ class VariantIntervals():
                 
                 if len(self.variant.alternative[1:]) == interval.seq_len:
                     self.supporting_reads += 1
-                
-                self.all_reads += 1
+
 
                     
         
         ##deletions
         if len(self.variant.reference) > 1 and len(self.variant.alternative) == 1:
             for interval in self.intervals:
+                if  (self.variant.position + 1) < interval.start or  (self.variant.position + 1) > interval.end:
+                    continue
+                    
+                self.all_reads += 1
+                
                 if interval.seq_type != CigarChar("D").value:
                     continue
                                     
-                if  (self.variant.position + 1) < interval.start or  (self.variant.position + 1) > interval.end:
-                    continue
-                
                 if len(self.variant.reference[1:]) == interval.seq_len:
-                    self.supporting_reads += 1
-                    
-                self.all_reads += 1
+                    self.supporting_reads += 1             

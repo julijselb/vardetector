@@ -2,16 +2,13 @@ from enum import Enum
 
 
 class Variant():
-    def __init__(self, chromosome: str, position: int, reference: str, alternative: str, variant_type: str = None):
+    def __init__(self, chromosome: str, position: int, reference: str, alternative: str):
         self.chromosome = chromosome
         self.position = position
         self.reference = reference
         self.alternative = alternative
         alternative_str = "-".join(alternative.split(","))
         self.identifier = f"{chromosome}-{position}-{reference}-{alternative_str}"
-        
-        if variant_type is not None:
-            self.variant_type = variant_type
 
         
             
@@ -106,18 +103,17 @@ class Read():
             if seq_type == CigarChar("M").value or seq_type == CigarChar("=").value or seq_type == CigarChar("X").value:
                 temp_sequence = sequence[seq_start: (seq_start+seq_len)]
                 
-                i_list.append(Interval(chromosome=chromosome, start=start, end=(start+seq_len), sequence=temp_sequence, seq_type=seq_type))
+                i_list.append(Interval(chromosome=chromosome, start=start, end=(start+seq_len), sequence=temp_sequence, seq_type=seq_type, seq_len=seq_len))
                 start += seq_len
                 seq_start += seq_len
             
             if seq_type == CigarChar("I").value or seq_type == CigarChar("S").value: ##S was added here check if it is OK or if it should be in before if statement
                 temp_sequence = sequence[seq_start: (seq_start+seq_len)]
-                i_list.append(Interval(chromosome=chromosome, start=start, end=start, sequence=temp_sequence, seq_type=seq_type))
-                
+                i_list.append(Interval(chromosome=chromosome, start=start, end=start, sequence=temp_sequence, seq_type=seq_type, seq_len=seq_len))    
                 seq_start += seq_len
                 
             if seq_type == CigarChar("D").value:
-                i_list.append(Interval(chromosome=chromosome, start=start, end=(start+seq_len), sequence=None, seq_type=seq_type))
+                i_list.append(Interval(chromosome=chromosome, start=start, end=(start+seq_len), sequence=None, seq_type=seq_type, seq_len=seq_len))
                 start += seq_len
         
         return i_list
@@ -127,11 +123,13 @@ class Read():
         
                     
 class Interval():
-    def __init__(self, chromosome: str, start: int, end: int, sequence: str, seq_type: str):
+    def __init__(self, chromosome: str, start: int, end: int, sequence: str, seq_type: str, seq_len: int):
         self.chromosome = chromosome
         self.start = start
         self.end = end
         self.sequence = sequence
+        self.seq_type = seq_type
+        self.seq_len = seq_len
         
     
     
@@ -181,9 +179,16 @@ class VariantIntervals():
         return intervals
     
     def count_supporting_reads(self) -> None:
+        
         ## SNVs
         if len(self.variant.reference) == 1 and len(self.variant.alternative) == 1:
             for interval in self.intervals:
+                if interval.seq_type in [CigarChar("I").value, CigarChar("D").value, CigarChar("S").value, CigarChar("H").value, CigarChar("P").value]:
+                    continue
+                    
+                if  self.variant.position < interval.start or  self.variant.position > interval.end:
+                    continue
+                
                 relative_var_position: int = (self.variant.position - interval.start)
                 if self.variant.alternative == interval.sequence[relative_var_position]:
                     self.supporting_reads += 1
@@ -195,46 +200,35 @@ class VariantIntervals():
         ## insertions
         if len(self.variant.reference) == 1 and len(self.variant.alternative) > 1:
             for interval in self.intervals:
+                
+                if interval.seq_type != CigarChar("I").value:
+                    continue
+                
+                if  (self.variant.position + 1) < interval.start or  (self.variant.position + 1) > interval.end:
+                    continue
+                
                 relative_var_start: int = (self.variant.position - interval.start)
                 relative_var_end: int = relative_var_start + len(self.variant.alternative)
-                relative_var_second_end: int = relative_var_end + len(self.variant.alternative)
                 
                 insertion_seq: str = interval.sequence[relative_var_start: relative_var_end]
-                after_insertion_seq: str = None
-                if len(interval.sequence) >= relative_var_end:
-                    after_insertion_seq = interval.sequence[relative_var_end: (relative_var_second_end - 1)] 
-                    
-                if after_insertion_seq is not None: 
-                    if insertion_seq[1:] == after_insertion_seq[:-1]: #-1 to remove first and last base 
-                        self.all_reads += 1
-                        continue
-                    
-                if self.variant.alternative == insertion_seq:
+                
+                if len(self.variant.alternative[1:]) == interval.seq_len:
                     self.supporting_reads += 1
-                    self.all_reads += 1
-                else:
-                    self.all_reads += 1
+                
+                self.all_reads += 1
+
                     
         
         ##deletions
         if len(self.variant.reference) > 1 and len(self.variant.alternative) == 1:
             for interval in self.intervals:
-                relative_var_start: int = (self.variant.position - interval.start)
-                relative_var_end: int = relative_var_start + len(self.variant.reference)
-                relative_var_second_end: int = relative_var_end + len(self.variant.reference)
-                    
-                del_seq: str = interval.sequence[relative_var_start: relative_var_end]
-                after_del_seq: str = None
-                if len(interval.sequence) >= relative_var_end:
-                    after_del_seq = interval.sequence[relative_var_end : relative_var_second_end]
-                    
-                if after_del_seq is not None:
-                    if del_seq[1:] == after_del_seq[:-1]:
-                        self.all_reads += 1
-                        continue
+                if interval.seq_type != CigarChar("D").value:
+                    continue
+                                    
+                if  (self.variant.position + 1) < interval.start or  (self.variant.position + 1) > interval.end:
+                    continue
                 
-                if self.variant.reference == del_seq:
-                    self.all_reads += 1
-                else:
+                if len(self.variant.reference[1:]) == interval.seq_len:
                     self.supporting_reads += 1
-                    self.all_reads += 1
+                    
+                self.all_reads += 1

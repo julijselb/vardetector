@@ -14,8 +14,8 @@ def detect_variants(path_to_bam_folder: str, path_to_vcf: str) -> list:
     bam_df = bam_df.drop_nulls("reference")
     
     # the below will have to change (rading directly from a vcf file)
-    variants_df: pl.DataFrame = pl.read_csv(path_to_vcf, separator="\t", schema_overrides={"CHROM":str, "Reference":str})
-    variants_df = variants_df.unique(subset=["CHROM", "POS", "REF", "ALT"], maintain_order=True)
+    variants_df: pl.DataFrame = pl.read_csv(path_vcf, separator="\t", comment_prefix = "##", schema_overrides={"#CHROM":str, "Reference":str})
+    variants_df = variants_df.rename({"#CHROM": "CHROM"})
     
     variants_intervals: list = []
 

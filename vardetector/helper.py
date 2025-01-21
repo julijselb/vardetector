@@ -164,8 +164,15 @@ class VariantIntervals():
         intervals = []
         for read in self.reads:
             for interval in read.interval_list:
-                if interval.start <= self.variant.position and self.variant.position <= interval.end:
-                    intervals.append(interval)
+                
+                if interval.seq_type in [CigarChar("M").value, CigarChar("=").value, CigarChar("X").value]:
+                    if interval.start <= self.variant.position and self.variant.position <= interval.end:
+                        intervals.append(interval)
+                        
+                if interval.seq_type in [CigarChar("D").value, CigarChar("I").value]:
+                    if (interval.start - 1) <= self.variant.position and self.variant.position <= interval.end:
+                        intervals.append(interval)
+
         
         return intervals
     
@@ -174,7 +181,7 @@ class VariantIntervals():
         ## SNVs
         if len(self.variant.reference) == 1 and len(self.variant.alternative) == 1:
             for interval in self.intervals:
-                if  self.variant.position < interval.start or  self.variant.position > interval.end:
+                if  self.variant.position < interval.start  or  interval.end < self.variant.position:
                     continue
                 
                 self.all_reads += 1
@@ -191,18 +198,13 @@ class VariantIntervals():
         ## insertions
         if len(self.variant.reference) == 1 and len(self.variant.alternative) > 1:
             for interval in self.intervals:
-                if  (self.variant.position + 1) < interval.start or  (self.variant.position + 1) > interval.end:
+                if  (self.variant.position + 1) < interval.start or  interval.end < (self.variant.position + 1):
                     continue
                     
                 self.all_reads += 1
                 
                 if interval.seq_type != CigarChar("I").value:
                     continue
-
-                relative_var_start: int = (self.variant.position - interval.start)
-                relative_var_end: int = relative_var_start + len(self.variant.alternative)
-                
-                insertion_seq: str = interval.sequence[relative_var_start: relative_var_end]
                 
                 if len(self.variant.alternative[1:]) == interval.seq_len:
                     self.supporting_reads += 1
@@ -213,7 +215,7 @@ class VariantIntervals():
         ##deletions
         if len(self.variant.reference) > 1 and len(self.variant.alternative) == 1:
             for interval in self.intervals:
-                if  (self.variant.position + 1) < interval.start or  (self.variant.position + 1) > interval.end:
+                if  (self.variant.position + 1) < interval.start or interval.end < (self.variant.position + 1):
                     continue
                     
                 self.all_reads += 1

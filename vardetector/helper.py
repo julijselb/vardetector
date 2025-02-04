@@ -190,6 +190,9 @@ class VariantIntervals():
                     continue
                     
                 relative_var_position: int = (self.variant.position - interval.start)
+                if relative_var_position > (len(interval.sequence) - 1):
+                    continue
+                
                 if self.variant.alternative == interval.sequence[relative_var_position]:
                     self.supporting_reads += 1
 

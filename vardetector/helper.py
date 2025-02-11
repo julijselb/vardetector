@@ -2,13 +2,42 @@ from enum import Enum
 
 
 class Variant():
-    def __init__(self, chromosome: str, position: int, reference: str, alternative: str):
+    def __init__(self, chromosome: str, position: int, reference: str, alternative: str, form: str = None, tumor: str = None, 
+                 normal: str = None):
         self.chromosome = chromosome
         self.position = position
         self.reference = reference
         self.alternative = alternative
+        self.form = form
+        self.tumor = tumor
+        self.normal = normal
+        
+        self.zero_n, self.one_n = self.parse_n_reads(self.normal)
+        self.zero_t, self.one_t = self.parse_n_reads(self.tumor)
+            
         alternative_str = "-".join(alternative.split(","))
         self.identifier = f"{chromosome}-{position}-{reference}-{alternative_str}"
+        
+        
+    def parse_n_reads(self, string_sequence:str):
+        
+        if string_sequence is None:
+            return (None, None)
+        
+        symbol_pos: int = None
+        
+        for idx, symbol in enumerate(self.form.split(":")):
+            if symbol == "AD":
+                symbol_pos = idx
+                break
+        
+        supporting_reads: str = string_sequence.split(":")[symbol_pos]
+        numbers_list: list = supporting_reads.split(",")
+        zero: float = float(numbers_list[0])
+        one: float = float(numbers_list[1])
+            
+        return(zero, one)
+        
 
         
             

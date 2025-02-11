@@ -8,7 +8,8 @@ from helper import VariantIntervals
 
 ROW_LIMIT: int = 1000000
 
-def detect_variants(paths_to_bam_folders: list, path_to_vcf: str) -> list:
+def detect_variants(paths_to_bam_folders: list, path_to_vcf: str, fraction: float = 1, form: str = None, tumor: str = None,
+                    normal: str = None) -> list:
     
     # the below will have to change (rading directly from a vcf file)
     variants_df: pl.DataFrame = pl.read_csv(path_to_vcf, separator="\t", comment_prefix = "##", schema_overrides={"#CHROM":str, "Reference":str})
@@ -23,15 +24,24 @@ def detect_variants(paths_to_bam_folders: list, path_to_vcf: str) -> list:
         bam_df: pl.DataFrame = read_bam_files(path_to_bam_folder=path_to_bam_folder)
         bam_df = bam_df.drop_nulls("reference")
         print(bam_df.shape)
+        
+        if fraction != 1:
+            bam_df = bam_df.sample(fraction=fraction)
+            print(bam_df.shape)
+        
 
         for chromosome in variants_df["CHROM"].unique():
 
             print(chromosome)
             variants_df_chr = variants_df.filter(pl.col("CHROM")==chromosome)
             variants_dict = {}
-
+            
             for row in variants_df_chr.iter_rows(named=True):
-                temp_variant = Variant(chromosome=row["CHROM"], position=row["POS"], reference=row["REF"], alternative=row["ALT"])
+                if form is not None and tumor is not None and normal is not None:
+                    temp_variant = Variant(chromosome=row["CHROM"], position=row["POS"], reference=row["REF"], alternative=row["ALT"],
+                                           form=row[form], tumor=row[tumor], normal=row[normal])
+                else:
+                    temp_variant = Variant(chromosome=row["CHROM"], position=row["POS"], reference=row["REF"], alternative=row["ALT"])
                 variants_dict[temp_variant.identifier] = temp_variant
 
             bam_df_chr = bam_df.filter(pl.col("reference")==chromosome)
@@ -63,13 +73,32 @@ def detect_variants(paths_to_bam_folders: list, path_to_vcf: str) -> list:
 
 
 
-def create_report_df(paths_to_bam_folders: str, path_to_vcf: str, to_polars=True):
+def create_report_df(paths_to_bam_folders: str, path_to_vcf: str, to_polars=True, fraction: float = 1, form: str = None,
+                     tumor: str = None, normal: str = None):
     
-    variants_intervals: list = detect_variants(paths_to_bam_folders=paths_to_bam_folders, path_to_vcf=path_to_vcf)
+    variants_intervals: list = detect_variants(paths_to_bam_folders=paths_to_bam_folders, path_to_vcf=path_to_vcf, fraction=fraction,
+                                               form=form, tumor=tumor, normal=normal)
     variants_summary: list = []
     for variant_intervals in variants_intervals:
         temp_variant = {}
         temp_variant["identifier"] = variant_intervals.variant.identifier
+        
+        if variant_intervals.variant.form:
+            temp_variant["fomat"] =variant_intervals.variant.form
+        if variant_intervals.variant.tumor:
+            temp_variant["tumor"] =variant_intervals.variant.tumor
+        if variant_intervals.variant.normal:
+            temp_variant["normal"] =variant_intervals.variant.normal        
+        
+        if variant_intervals.variant.zero_t:
+            temp_variant["zero_t"] =variant_intervals.variant.zero_t
+        if variant_intervals.variant.one_t:
+            temp_variant["one_t"] =variant_intervals.variant.one_t
+        if variant_intervals.variant.zero_n:
+            temp_variant["zero_n"] =variant_intervals.variant.zero_n
+        if variant_intervals.variant.one_n:
+            temp_variant["one_n"] =variant_intervals.variant.one_n
+
         temp_variant["supporting_reads"] = variant_intervals.supporting_reads
         temp_variant["all_reads"] = variant_intervals.all_reads
         temp_variant["proportion_supporting"] = variant_intervals.proportion_supporting

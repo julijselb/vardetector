@@ -26,7 +26,7 @@ def detect_variants(paths_to_bam_folders: list, path_to_vcf: str, fraction: floa
         print(bam_df.shape)
         
         if fraction != 1:
-            bam_df = bam_df.sample(fraction=fraction)
+            bam_df = bam_df.sample(fraction=fraction, seed=0)
             print(bam_df.shape)
         
 
@@ -83,21 +83,27 @@ def create_report_df(paths_to_bam_folders: str, path_to_vcf: str, to_polars=True
         temp_variant = {}
         temp_variant["identifier"] = variant_intervals.variant.identifier
         
-        if variant_intervals.variant.form:
+        if variant_intervals.variant.form is not None:
             temp_variant["fomat"] =variant_intervals.variant.form
-        if variant_intervals.variant.tumor:
+        if variant_intervals.variant.tumor is not None:
             temp_variant["tumor"] =variant_intervals.variant.tumor
-        if variant_intervals.variant.normal:
+        if variant_intervals.variant.normal is not None:
             temp_variant["normal"] =variant_intervals.variant.normal        
         
-        if variant_intervals.variant.zero_t:
-            temp_variant["zero_t"] =variant_intervals.variant.zero_t
-        if variant_intervals.variant.one_t:
-            temp_variant["one_t"] =variant_intervals.variant.one_t
-        if variant_intervals.variant.zero_n:
-            temp_variant["zero_n"] =variant_intervals.variant.zero_n
-        if variant_intervals.variant.one_n:
+        if variant_intervals.variant.one_n is not None:
             temp_variant["one_n"] =variant_intervals.variant.one_n
+        if variant_intervals.variant.zero_t is not None:
+            temp_variant["zero_t"] =variant_intervals.variant.zero_t
+        if variant_intervals.variant.one_t is not None:
+            temp_variant["one_t"] =variant_intervals.variant.one_t
+        if variant_intervals.variant.zero_n is not None:
+            temp_variant["zero_n"] =variant_intervals.variant.zero_n
+        if variant_intervals.variant.one_n is not None:
+            temp_variant["one_n"] =variant_intervals.variant.one_n
+        if variant_intervals.variant.t_n_or is not None:
+            temp_variant["t_n_OR"] =variant_intervals.variant.t_n_or
+        if variant_intervals.variant.t_n_p_val is not None:
+            temp_variant["t_n_p_val"] =variant_intervals.variant.t_n_p_val
 
         temp_variant["supporting_reads"] = variant_intervals.supporting_reads
         temp_variant["all_reads"] = variant_intervals.all_reads

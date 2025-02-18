@@ -1,4 +1,6 @@
 from enum import Enum
+from scipy.stats import fisher_exact
+import numpy as np
 
 
 class Variant():
@@ -14,6 +16,14 @@ class Variant():
         
         self.zero_n, self.one_n = self.parse_n_reads(self.normal)
         self.zero_t, self.one_t = self.parse_n_reads(self.tumor)
+        
+        self.t_n_or = None
+        self.t_n_p_val = None
+        
+        if self.zero_n is not None and self.one_n is not None and self.zero_t is not None and self.one_t is not None:
+            c_table = np.array([[self.zero_n, self.one_n], 
+                                [self.zero_t, self.one_t]])
+            self.t_n_or, self.t_n_p_val = fisher_exact(c_table)
             
         alternative_str = "-".join(alternative.split(","))
         self.identifier = f"{chromosome}-{position}-{reference}-{alternative_str}"

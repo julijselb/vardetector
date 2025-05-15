@@ -1,2 +1,7 @@
+.DS_Store
+.idea/
 .venv/*
 vardetector/__pycache__/*
+vardetector.egg-info/*
+resources/*
+vardetector/test.py

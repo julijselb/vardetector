@@ -1,5 +1,6 @@
 import biobear as bb
 import polars as pl
+from enum import Enum
 # import pandas as pd
 
 from helper import Variant
@@ -8,7 +9,7 @@ from helper import VariantIntervals
 
 ROW_LIMIT: int = 1000000
 
-def detect_variants(paths_to_bam_folders: list, path_to_vcf: str, fraction: float = 1, form: str = None, tumor: str = None,
+def detect_variants(path_to_sam: str, path_to_vcf: str, fraction: float = 1, breaks=3,form: str = None, tumor: str = None,
                     normal: str = None) -> list:
     
     # the below will have to change (rading directly from a vcf file)
@@ -16,26 +17,31 @@ def detect_variants(paths_to_bam_folders: list, path_to_vcf: str, fraction: floa
     variants_df = variants_df.rename({"#CHROM": "CHROM"})
     
     variants_intervals: list = []
-        
-    for path_to_bam_folder in paths_to_bam_folders:
-        
-        print(path_to_bam_folder)
-        
-        bam_df: pl.DataFrame = read_bam_files(path_to_bam_folder=path_to_bam_folder)
-        bam_df = bam_df.drop_nulls("reference")
-        print(bam_df.shape)
+
+    chromosomes = variants_df['CHROM'].unique().to_list()
+    chromosomes.sort()
+
+    chr_sublist: list = []
+    for i in range(breaks):
+        chr_sublist.append(chromosomes[i::breaks])
+
+    for chromosomes in chr_sublist:
+
+        sam_df_chromosomes: pl.DataFrame = read_sam(path_to_sam, chromosomes)
+        sam_df_chromosomes = sam_df_chromosomes.drop_nulls("reference")
+        print(sam_df_chromosomes.shape)
         
         if fraction != 1:
-            bam_df = bam_df.sample(fraction=fraction, seed=0)
-            print(bam_df.shape)
-        
+            sam_df_chromosomes = sam_df_chromosomes.sample(fraction=fraction, seed=0)
+            print(sam_df_chromosomes.shape)
 
-        for chromosome in variants_df["CHROM"].unique():
+        for chromosome in chromosomes:
 
             print(chromosome)
-            variants_df_chr = variants_df.filter(pl.col("CHROM")==chromosome)
+            variants_df_chr: pl.DataFrame = variants_df.filter(pl.col("CHROM")==chromosome)
+            sam_df_chr: pl.DataFrame = sam_df_chromosomes.filter(pl.col("reference")==chromosome)
             variants_dict = {}
-            
+
             for row in variants_df_chr.iter_rows(named=True):
                 if form is not None and tumor is not None and normal is not None:
                     temp_variant = Variant(chromosome=row["CHROM"], position=row["POS"], reference=row["REF"], alternative=row["ALT"],
@@ -44,12 +50,10 @@ def detect_variants(paths_to_bam_folders: list, path_to_vcf: str, fraction: floa
                     temp_variant = Variant(chromosome=row["CHROM"], position=row["POS"], reference=row["REF"], alternative=row["ALT"])
                 variants_dict[temp_variant.identifier] = temp_variant
 
-            bam_df_chr = bam_df.filter(pl.col("reference")==chromosome)
-
             for variant_id, variant in variants_dict.items():
 
-                bam_df_temp = bam_df_chr.filter(pl.col("start") <= variant.position, pl.col("end") >= variant.position)
-                tmp_rows = bam_df_temp.shape[0]
+                sam_df_temp = sam_df_chr.filter(pl.col("start") <= variant.position, pl.col("end") >= variant.position)
+                tmp_rows = sam_df_temp.shape[0]
 
                 if tmp_rows == 0:
                     continue
@@ -57,7 +61,7 @@ def detect_variants(paths_to_bam_folders: list, path_to_vcf: str, fraction: floa
                 ## ToDo remove and handle variants with more than 1M reads
 
                 reads_temp = []
-                for r in bam_df_temp.iter_rows(named=True):
+                for r in sam_df_temp.iter_rows(named=True):
                     read = Read(name=r["name"], reference=r["reference"], start=r["start"], end=r["end"], cigar=r["cigar"], sequence=r["sequence"])
                     reads_temp.append(read)
 
@@ -65,9 +69,8 @@ def detect_variants(paths_to_bam_folders: list, path_to_vcf: str, fraction: floa
                     variant_intervals = VariantIntervals(variant=variant, reads=reads_temp)
                     if variant_intervals.intervals != []:
                         variants_intervals.append(variant_intervals)
-        
-        del(bam_df)
-                
+            del(sam_df_chr)
+        del(sam_df_chromosomes)
     return variants_intervals
 
 
@@ -118,19 +121,52 @@ def create_report_df(paths_to_bam_folders: str, path_to_vcf: str, to_polars=True
     return return_df
 
 
-        
-def read_bam_files(path_to_bam_folder: str):
-    
-    session = bb.new_session()
-    query_1 = f"CREATE EXTERNAL TABLE bam_table STORED AS BAM LOCATION '{path_to_bam_folder}'"
-    session.sql(f"{query_1}")
-    
-    query_2 = "SELECT name, reference, start, end, cigar, sequence, mate_reference FROM bam_table"
-    df = session.sql(f"{query_2}").to_polars()
-    del(session)
+def read_sam(path_to_sam: str, chromosomes: list) -> pl.DataFrame:
+
+    rename_cols: dict = {OrigCols.column_1.value: RnmCols.name.value, OrigCols.column_3.value: RnmCols.reference.value,
+                         OrigCols.column_4.value: RnmCols.start.value, OrigCols.column_6.value: RnmCols.cigar.value,
+                         OrigCols.column_7.value: RnmCols.mate_chr.value, OrigCols.column_8.value: RnmCols.mate_start.value,
+                         OrigCols.column_9.value: RnmCols.interval_len.value, OrigCols.column_10.value: RnmCols.sequence.value}
+
+    select_cols: list = list(rename_cols.values())
+    select_cols.extend([RnmCols.interval_len_abs.value, RnmCols.end.value])
+
+    df = (pl.scan_csv(path_to_sam, separator="\t", infer_schema=False, comment_prefix="@", truncate_ragged_lines=True,has_header=False)
+          .rename(rename_cols).filter(pl.col(RnmCols.reference.value).is_in(chromosomes), pl.col(RnmCols.mate_chr.value) == "=")
+          .cast({RnmCols.start.value: pl.Int64, RnmCols.mate_start.value: pl.Int64, RnmCols.interval_len.value: pl.Int64}, strict=False)
+          .with_columns(pl.when(pl.col(RnmCols.start.value) >= pl.col(RnmCols.mate_start.value)).
+                        then(pl.col(RnmCols.start.value)).otherwise(pl.col(RnmCols.mate_start.value)).alias(RnmCols.five_right_start.value))
+          .with_columns(pl.col(RnmCols.interval_len.value).abs().alias(RnmCols.interval_len_abs.value))
+          .with_columns(pl.sum_horizontal(RnmCols.five_right_start.value, RnmCols.interval_len_abs.value).alias(RnmCols.end.value))
+          .select(select_cols).collect())
+
     return df
 
 
+class OrigCols(Enum):
+    column_1 = "column_1"
+    column_3 = "column_3"
+    column_4 = "column_4"
+    column_6 = "column_6"
+    column_7 = "column_7"
+    column_8 = "column_8"
+    column_9 = "column_9"
+    column_10 = "column_10"
+
+
+class RnmCols(Enum):
+    name = "name"
+    reference = "reference"
+    five_right_start = "five_right_start"
+    cigar = "cigar"
+    mate_chr = "mate_chr"
+    mate_start = "mate_start"
+    interval_len = "interval_len"
+    interval_len_abs = "interval_len_abs"
+    sequence = "sequence"
+    # interval_start = "interval_start"
+    start = "start" #sequence start
+    end = "end"
 
 
 def ping():

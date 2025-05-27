@@ -5,3 +5,4 @@ vardetector/__pycache__/*
 vardetector.egg-info/*
 resources/*
 vardetector/test.py
+container/*

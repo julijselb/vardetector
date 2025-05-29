@@ -58,6 +58,7 @@ class Read():
         self.reference = reference
         self.start = start
         self.end = end
+        self.actual_end = start
         self.cigar = cigar
         self.sequence = sequence
         self.zero_based = zero_based
@@ -138,6 +139,7 @@ class Read():
             
             if seq_type == CigarChar("N").value:
                 start += seq_len
+                self.actual_end += seq_len
             
             if seq_type == CigarChar("M").value or seq_type == CigarChar("=").value or seq_type == CigarChar("X").value:
                 temp_sequence = sequence[seq_start: (seq_start+seq_len)]
@@ -145,6 +147,7 @@ class Read():
                 i_list.append(Interval(chromosome=chromosome, start=start, end=(start+seq_len), sequence=temp_sequence, seq_type=seq_type, seq_len=seq_len))
                 start += seq_len
                 seq_start += seq_len
+                self.actual_end += seq_len
             
             if seq_type == CigarChar("I").value or seq_type == CigarChar("S").value: ##S was added here check if it is OK or if it should be in before if statement
                 temp_sequence = sequence[seq_start: (seq_start+seq_len)]
@@ -154,6 +157,7 @@ class Read():
             if seq_type == CigarChar("D").value:
                 i_list.append(Interval(chromosome=chromosome, start=start, end=(start+seq_len), sequence=None, seq_type=seq_type, seq_len=seq_len))
                 start += seq_len
+                self.actual_end += seq_len
         
         return i_list
                 

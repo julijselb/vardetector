@@ -8,8 +8,8 @@ from helper import VariantIntervals
 
 ROW_LIMIT: int = 1000000
 
-def detect_variants(path_to_sam: str, path_to_vcf: str, fraction: float = 1, breaks=3,form: str = None, tumor: str = None,
-                    normal: str = None) -> list:
+def detect_variants(path_to_sam: str, path_to_vcf: str, mapq_cut_off: int, fraction: float = 1, breaks=3,
+                    form: str = None, tumor: str = None, normal: str = None) -> list:
     
     # the below will have to change (rading directly from a vcf file)
     variants_df: pl.DataFrame = pl.read_csv(path_to_vcf, separator="\t", comment_prefix = "##", schema_overrides={"#CHROM":str, "Reference":str})
@@ -30,7 +30,7 @@ def detect_variants(path_to_sam: str, path_to_vcf: str, fraction: float = 1, bre
 
     for chromosomes in chr_sublist:
 
-        sam_df_chromosomes: pl.DataFrame = read_sam(path_to_sam, chromosomes)
+        sam_df_chromosomes: pl.DataFrame = read_sam(path_to_sam=path_to_sam, chromosomes=chromosomes, mapq_cut_off=mapq_cut_off)
         sam_df_chromosomes = sam_df_chromosomes.drop_nulls("reference")
         print(sam_df_chromosomes.shape)
         
@@ -83,11 +83,11 @@ def detect_variants(path_to_sam: str, path_to_vcf: str, fraction: float = 1, bre
 
 
 
-def create_report_df(path_to_sam: str, path_to_vcf: str, to_polars=True, fraction: float = 1, breaks: int = 3,
+def create_report_df(path_to_sam: str, path_to_vcf: str, mapq_cut_off: int = 20, to_polars=True, fraction: float = 1, breaks: int = 3,
                      form: str = None, tumor: str = None, normal: str = None):
     
     variants_intervals: list = detect_variants(path_to_sam=path_to_sam, path_to_vcf=path_to_vcf, fraction=fraction,
-                                               breaks=breaks, form=form, tumor=tumor, normal=normal)
+                                               breaks=breaks, form=form, tumor=tumor, normal=normal, mapq_cut_off=mapq_cut_off)
     variants_summary: list = []
     for variant_intervals in variants_intervals:
 
@@ -129,12 +129,13 @@ def create_report_df(path_to_sam: str, path_to_vcf: str, to_polars=True, fractio
     return return_df
 
 
-def read_sam(path_to_sam: str, chromosomes: list) -> pl.DataFrame:
+def read_sam(path_to_sam: str, chromosomes: list, mapq_cut_off: int) -> pl.DataFrame:
 
     #OrigCols.column_8.value: RnmCols.mate_start.value, OrigCols.column_9.value: RnmCols.interval_len.value,
     rename_cols: dict = {OrigCols.column_1.value: RnmCols.name.value, OrigCols.column_3.value: RnmCols.reference.value,
-                         OrigCols.column_4.value: RnmCols.start.value, OrigCols.column_6.value: RnmCols.cigar.value,
-                         OrigCols.column_7.value: RnmCols.mate_chr.value, OrigCols.column_10.value: RnmCols.sequence.value}
+                         OrigCols.column_4.value: RnmCols.start.value, OrigCols.column_5.value: RnmCols.mapq.value,
+                         OrigCols.column_6.value: RnmCols.cigar.value, OrigCols.column_7.value: RnmCols.mate_chr.value,
+                         OrigCols.column_10.value: RnmCols.sequence.value}
 
     select_cols: list = list(rename_cols.values())
     #RnmCols.interval_len_abs.value,
@@ -148,6 +149,8 @@ def read_sam(path_to_sam: str, chromosomes: list) -> pl.DataFrame:
     df = (pl.scan_csv(path_to_sam, separator="\t", infer_schema=False, comment_prefix="@", truncate_ragged_lines=True,has_header=False)
           .rename(rename_cols).filter(pl.col(RnmCols.reference.value).is_in(chromosomes), pl.col(RnmCols.mate_chr.value) == "=")
           .cast({RnmCols.start.value: pl.Int64}, strict=False)
+          .cast({RnmCols.mapq.value: pl.Int64}, strict=False)
+          .filter(pl.col(RnmCols.mapq.value) >= mapq_cut_off)
           .with_columns(pl.col(RnmCols.cigar.value).str.extract_all(r"(\d+)").alias(RnmCols.extracted_nrs.value))
           .with_columns(pl.col(RnmCols.extracted_nrs.value).cast(pl.List(pl.Int64), strict=False))
           .with_columns(pl.col(RnmCols.extracted_nrs.value).list.sum().alias(RnmCols.cigar_sum.value))
@@ -161,6 +164,7 @@ class OrigCols(Enum):
     column_1 = "column_1"
     column_3 = "column_3"
     column_4 = "column_4"
+    column_5 = "column_5"
     column_6 = "column_6"
     column_7 = "column_7"
     column_8 = "column_8"
@@ -173,6 +177,7 @@ class RnmCols(Enum):
     reference = "reference"
     five_right_start = "five_right_start"
     cigar = "cigar"
+    mapq = "mapq"
     mate_chr = "mate_chr"
     mate_start = "mate_start"
     interval_len = "interval_len"

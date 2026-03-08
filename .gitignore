@@ -6,4 +6,5 @@ vardetector.egg-info/*
 resources/*
 vardetector/test.py
 vardetector/manuscript.py
+vardetector/analysis.py
 container/*

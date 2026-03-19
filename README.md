@@ -22,3 +22,7 @@ from detector import create_report_df
 df: pl.DataFrame = create_report_df(/path/to/sam, /path/to/vcf)
 
 "
+
+# Acknowledgments and Funding
+
+The development of the program was supported by the Slovenian Research and Innovation Agency (the vast majority (more than 50%) of the funding originated from grant J3-4516; other funding sources include grant J3-50109 and research programs P3-0360 and P1-0245).

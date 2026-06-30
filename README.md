@@ -1,4 +1,5 @@
 # A Python package to detect DNA called variants (.vcf file) in RNA reads (.sam file)
+https://www.nature.com/articles/s41598-026-57695-9
 
 # Installation
 ## install polars and scipy
